@@ -45,23 +45,41 @@ bool        gpsIsActive     = true;
 
 
 namespace GPS_Utils {
+    #define SERIAL_BUFFER_SZ    2000
+    char rxBuffer[SERIAL_BUFFER_SZ];
+
+    void onReceive() {
+      int count;
+      memset(rxBuffer,0, sizeof(rxBuffer));
+      count = gpsSerial.readBytes(rxBuffer,sizeof(rxBuffer));
+        for (int i = 0; i < count; i++)
+            gps.encode(rxBuffer[i]);
+    }
 
     void setup() {
         if (disableGPS) {
             logger.log(logging::LoggerLevel::LOGGER_LEVEL_WARN, "Main", "GPS disabled");
             return;
         }
-        #ifdef LIGHTTRACKER_PLUS_1_0
+        #ifdef GPS_VCC
+            #ifdef LIGHTTRACKER_PLUS_1_0
+                #define GPS_VCC_ENABLE_LOW
+            #endif
+            #if defined(F4GOH_1W_LoRa_Tracker) || defined(F4GOH_1W_LoRa_Tracker_LLCC68)
+                #define GPS_VCC_ENABLE_HIGH
+            #endif
+            #ifdef GPS_VCC_ENABLE_HIGH
+                #define GPS_ACTIVE  HIGH
+            #endif
+            #ifdef GPS_VCC_ENABLE_LOW
+                #define GPS_ACTIVE  LOW
+            #endif
             pinMode(GPS_VCC, OUTPUT);
-            digitalWrite(GPS_VCC, LOW);
+            digitalWrite(GPS_VCC, GPS_ACTIVE);
             delay(200);
         #endif
-        #if defined(F4GOH_1W_LoRa_Tracker) || defined(F4GOH_1W_LoRa_Tracker_LLCC68)
-            pinMode(GPS_VCC, OUTPUT);
-            digitalWrite(GPS_VCC, HIGH);
-            delay(200);
-        #endif
-        
+        gpsSerial.setRxBufferSize(SERIAL_BUFFER_SZ);
+        gpsSerial.onReceive(onReceive);
         gpsSerial.begin(GPS_BAUD, SERIAL_8N1, GPS_TX, GPS_RX);
     }
 
@@ -73,8 +91,6 @@ namespace GPS_Utils {
     }
 
     void getData() {
-        if (disableGPS) return;
-        while (gpsSerial.available() > 0) gps.encode(gpsSerial.read());
     }
 
     void setDateFromData() {
